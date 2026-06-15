@@ -1,0 +1,26 @@
+name: Checkers CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Завантаження коду
+        uses: actions/checkout@v4
+
+      - name: Налаштування Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven # Кешування пришвидшить наступні запуски
+
+      - name: Компіляція та запуск усіх тестів
+        run: mvn -B clean test
