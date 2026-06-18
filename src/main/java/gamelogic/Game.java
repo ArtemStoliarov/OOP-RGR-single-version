@@ -7,194 +7,168 @@ import uilogic.SideBar;
 
 import java.awt.Color;
 import java.awt.Point;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Game orchestrates the overall game flow and delegates responsibilities to specialized services.
+ * Responsibility: Coordinating game state, delegating logic to GameRulesEngine and UI state to GameUIState.
+ * This follows Single Responsibility Principle by separating concerns.
+ */
 public class Game implements GameInterface, Controller {
+    private GameRulesEngine rulesEngine;
+    private GameUIState uiState;
     private Board board;
     private History history;
     private SideBar sideBar;
-    private Color turn;
-
-    private Point selectedPos;
-    private Map<Point, List<Point>> validMoves;
-
-    private boolean gameOver;
-    private String winnerText;
-    private boolean showInfo;
-    private int infoTab;
 
     public Game() {
-        history = new History();
-        sideBar = new SideBar(this);
-        reset();
+        this.board = CreateBoard.createStandard();
+        this.history = new History();
+        this.rulesEngine = new GameRulesEngine(board, history);
+        this.uiState = new GameUIState();
+        this.sideBar = new SideBar(this);
+        initializeGame();
     }
 
-    @Override
-    public void reset() {
-        board = CreateBoard.createStandard();
-        turn = Config.WHITE;
-        validMoves = new HashMap<>();
-        selectedPos = null;
-        gameOver = false;
-        winnerText = "";
-        showInfo = false;
-        infoTab = 0;
-
+    private void initializeGame() {
         history.reset(board);
         sideBar.resetConsole();
         sideBar.updateButtonStates();
     }
 
-    public void select(int row, int col) {
-        if (gameOver || isViewingPast()) return;
-
-        if (tryMoveSelectedPiece(row, col)) return;
-
-        Piece piece = board.getPiece(row, col);
-        if (!isValidSelection(piece)) return;
-
-        Map<Point, List<Point>> moves = piece.getValidMoves(board, row, col);
-        moves = enforceMandatoryJumps(moves);
-
-        if (moves.isEmpty()) return;
-
-        selectedPos = new Point(row, col);
-        validMoves = moves;
-    }
-
-    private boolean tryMoveSelectedPiece(int row, int col) {
-        if (selectedPos == null) return false;
-        if (movePiece(row, col)) return true;
-        selectedPos = null;
-        return false;
-    }
-
-    private boolean isValidSelection(Piece piece) {
-        return piece != null && piece.color.equals(turn);
-    }
-
-    private Map<Point, List<Point>> enforceMandatoryJumps(Map<Point, List<Point>> moves) {
-        if (!hasAvailableJumps(turn)) return moves;
-        return filterOnlyCaptures(moves);
-    }
-
-    private Map<Point, List<Point>> filterOnlyCaptures(Map<Point, List<Point>> moves) {
-        Map<Point, List<Point>> captures = new HashMap<>();
-        for (Map.Entry<Point, List<Point>> entry : moves.entrySet()) {
-            if (!entry.getValue().isEmpty()) {
-                captures.put(entry.getKey(), entry.getValue());
-            }
-        }
-        return captures;
-    }
-
-    private boolean movePiece(int row, int col) {
-        Point targetPoint = new Point(row, col);
-
-        if (board.getPiece(row, col) != null) return false;
-        if (!validMoves.containsKey(targetPoint)) return false;
-
-        List<Point> skippedCoords = validMoves.get(targetPoint);
-        boolean isCapture = (skippedCoords != null && !skippedCoords.isEmpty());
-
-        int oldX = selectedPos.x;
-        int oldY = selectedPos.y;
-
-        board.move(oldX, oldY, row, col);
-
-        if (isCapture) {
-            board.remove(skippedCoords);
-        }
-
-        history.recordMove(oldX, oldY, row, col, isCapture, turn, board);
-        sideBar.syncWithNewMove(history.getSize());
-
-        selectedPos = new Point(row, col);
-
-        if (isCapture) {
-            return handleConsecutiveJumps();
-        }
-
-        changeTurn();
-        return true;
-    }
-
-    private boolean handleConsecutiveJumps() {
-        Piece piece = board.getPiece(selectedPos.x, selectedPos.y);
-        Map<Point, List<Point>> nextMoves = piece.getValidMoves(board, selectedPos.x, selectedPos.y);
-        Map<Point, List<Point>> nextCaptures = filterOnlyCaptures(nextMoves);
-
-        if (!nextCaptures.isEmpty()) {
-            validMoves = nextCaptures;
-            return true;
-        }
-
-        changeTurn();
-        return true;
-    }
-
-    private void changeTurn() {
-        validMoves.clear();
-        selectedPos = null;
-        turn = turn.equals(Config.WHITE) ? Config.RED : Config.WHITE;
-        checkWinCondition();
-    }
-
-    private void checkWinCondition() {
-        String winner = determineWinner();
-        if (winner == null) return;
-
-        gameOver = true;
-        winnerText = "ПЕРЕМІГ: " + winner + "!";
+    @Override
+    public void reset() {
+        board = CreateBoard.createStandard();
+        rulesEngine.setBoard(board);
+        rulesEngine.resetTurn();
+        uiState.reset();
+        history.reset(board);
+        sideBar.resetConsole();
         sideBar.updateButtonStates();
     }
 
-    private String determineWinner() {
-        if (board.redLeft <= 0) return "БІЛІ";
-        if (board.whiteLeft <= 0) return "ЧЕРВОНІ";
-        if (!hasValidMoves(turn)) return turn.equals(Config.RED) ? "БІЛІ" : "ЧЕРВОНІ";
-        return null;
-    }
-
-    private boolean hasAvailableJumps(Color color) {
-        for (int r = 0; r < Config.ROWS; r++) {
-            for (int c = 0; c < Config.COLS; c++) {
-                if (canPieceJump(board.getPiece(r, c), r, c, color)) return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean canPieceJump(Piece p, int r, int c, Color color) {
-        if (p == null || !p.color.equals(color)) return false;
-        for (List<Point> skipped : p.getValidMoves(board, r, c).values()) {
-            if (!skipped.isEmpty()) return true;
-        }
-        return false;
-    }
-
-    private boolean hasValidMoves(Color color) {
-        for (int r = 0; r < Config.ROWS; r++) {
-            for (int c = 0; c < Config.COLS; c++) {
-                if (canPieceMove(board.getPiece(r, c), r, c, color)) return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean canPieceMove(Piece p, int r, int c, Color color) {
-        if (p == null || !p.color.equals(color)) return false;
-        return !p.getValidMoves(board, r, c).isEmpty();
-    }
-
+    /**
+     * Handles a piece selection and attempts to move it.
+     * This follows the OOP principle of "objects do things" - the selection action
+     * initiates a series of delegated responsibilities.
+     */
     @Override
     public boolean handleMouseClick(Point pos) {
         int row = pos.y / Config.SQUARE_SIZE;
         int col = pos.x / Config.SQUARE_SIZE;
-        select(row, col);
+
+        attemptPieceInteraction(row, col);
         return true;
+    }
+
+    // Compatibility method for tests and older callers that used grid coordinates
+    public void select(int row, int col) {
+        attemptPieceInteraction(row, col);
+    }
+
+    /**
+     * Attempts to interact with a piece at the given position.
+     * If a piece is already selected, this tries to move it.
+     * Otherwise, it selects a piece if it's valid.
+     */
+    private void attemptPieceInteraction(int row, int col) {
+        if (uiState.isGameOver() || isViewingPastMoves()) return;
+
+        // Try to move selected piece to this location
+        if (uiState.hasPieceSelected() && tryMovePiece(row, col)) {
+            sideBar.syncWithNewMove(history.getSize());
+            sideBar.updateButtonStates();
+            return;
+        }
+
+        // Otherwise, try to select a piece at this location
+        selectPieceAt(row, col);
+    }
+
+    /**
+     * Attempts to move the selected piece to the given position.
+     * Returns true if the move was successful.
+     */
+    private boolean tryMovePiece(int row, int col) {
+        Point selectedPos = uiState.getSelectedPosition();
+        if (selectedPos == null) return false;
+
+        // Capture current turn to detect whether a consecutive jump occurred
+        java.awt.Color beforeTurn = rulesEngine.getCurrentTurn();
+
+        boolean moveMade = rulesEngine.attemptMovePiece(selectedPos.x, selectedPos.y, row, col);
+
+        if (moveMade) {
+            // If the turn stayed the same the player may continue jumping -> keep selection and update moves
+            if (beforeTurn.equals(rulesEngine.getCurrentTurn())) {
+                uiState.selectPiece(row, col);
+                uiState.setValidMoves(rulesEngine.getAvailableMovesForPiece(row, col));
+            } else {
+                // Turn changed -> clear selection and valid moves immediately so highlight disappears
+                uiState.deselectPiece();
+            }
+
+            checkGameState();
+            return true;
+        }
+
+        uiState.deselectPiece();
+        return false;
+    }
+
+    /**
+     * Selects a piece at the given position if it's valid.
+     */
+    private void selectPieceAt(int row, int col) {
+        Piece piece = board.getPiece(row, col);
+
+        if (!rulesEngine.canSelectPiece(piece)) {
+            uiState.deselectPiece();
+            return;
+        }
+
+        Map<Point, List<Point>> moves = rulesEngine.getAvailableMovesForPiece(row, col);
+
+        if (moves.isEmpty()) {
+            uiState.deselectPiece();
+            return;
+        }
+
+        uiState.selectPiece(row, col);
+        uiState.setValidMoves(moves);
+    }
+
+    /**
+     * Checks the current game state and updates accordingly.
+     */
+    private void checkGameState() {
+        String winner = rulesEngine.checkWinCondition();
+        if (winner != null) {
+            endGame("ПЕРЕМІГ: " + winner + "!");
+        }
+    }
+
+    /**
+     * Ends the game with the given winner message.
+     */
+    private void endGame(String message) {
+        uiState.endGame(message);
+        sideBar.updateButtonStates();
+    }
+
+    /**
+     * Checks if we're currently viewing past game states in the history.
+     */
+    private boolean isViewingPastMoves() {
+        return sideBar.isViewingPast(history.getSize());
+    }
+
+    /**
+     * Public version for other classes to check if we're viewing past moves.
+     */
+    public boolean isViewingPast() {
+        return isViewingPastMoves();
     }
 
     @Override
@@ -202,31 +176,35 @@ public class Game implements GameInterface, Controller {
 
     @Override
     public void resign() {
-        if (gameOver) return;
-        gameOver = true;
-        showInfo = false;
-        String loser = turn.equals(Config.RED) ? "ЧЕРВОНІ" : "БІЛІ";
-        String winner = turn.equals(Config.RED) ? "БІЛІ" : "ЧЕРВОНІ";
-        winnerText = loser + " здалися. " + winner + " виграли!";
-        sideBar.updateButtonStates();
+        if (uiState.isGameOver()) return;
+
+        Color loser = rulesEngine.getCurrentTurn();
+        String loserName = loser.equals(Config.RED) ? "ЧЕРВОНІ" : "БІЛІ";
+        String winnerName = loser.equals(Config.RED) ? "БІЛІ" : "ЧЕРВОНІ";
+
+        endGame(loserName + " здалися. " + winnerName + " виграли!");
     }
 
     @Override
     public void toggleInfo() {
-        showInfo = !showInfo;
+        uiState.toggleInfo();
         sideBar.updateButtonStates();
     }
 
     @Override
     public void setInfoTab(int tab) {
-        infoTab = tab;
+        uiState.setInfoTab(tab);
     }
 
     @Override
-    public boolean isShowInfo() { return this.showInfo; }
+    public boolean isShowInfo() {
+        return uiState.isShowInfo();
+    }
 
     @Override
-    public int getInfoTab() { return this.infoTab; }
+    public int getInfoTab() {
+        return uiState.getInfoTab();
+    }
 
     @Override
     public int getHistorySize() {
@@ -234,33 +212,53 @@ public class Game implements GameInterface, Controller {
     }
 
     @Override
-    public boolean isGameOver() { return this.gameOver; }
-
-    public boolean isViewingPast() {
-        return sideBar.isViewingPast(history.getSize());
+    public boolean isGameOver() {
+        return uiState.isGameOver();
     }
 
+    // Getters for drawing and UI
     public Board getBoardToDraw() {
-        if (isViewingPast()) {
+        if (isViewingPastMoves()) {
             return history.getBoardAt(sideBar.getViewIndex());
         }
         return board;
     }
 
-    public Board getBoard() { return this.board; }
-    public History getHistory() { return this.history; }
-    public SideBar getSideBar() { return this.sideBar; }
-    public List<String> getTextHistory() { return history.getTextHistory(); }
+    public Board getBoard() {
+        return board;
+    }
 
-    public Color getTurn() { return this.turn; }
-    public String getWinnerText() { return this.winnerText; }
+    public History getHistory() {
+        return history;
+    }
 
-    public Point getSelectedPos() { return this.selectedPos; }
+    public SideBar getSideBar() {
+        return sideBar;
+    }
+
+    public List<String> getTextHistory() {
+        return history.getTextHistory();
+    }
+
+    public Color getTurn() {
+        return rulesEngine.getCurrentTurn();
+    }
+
+    public String getWinnerText() {
+        return uiState.getWinnerText();
+    }
+
+    public Point getSelectedPos() {
+        return uiState.getSelectedPosition();
+    }
 
     public Piece getSelectedPiece() {
+        Point selectedPos = uiState.getSelectedPosition();
         if (selectedPos == null) return null;
         return board.getPiece(selectedPos.x, selectedPos.y);
     }
 
-    public Map<Point, List<Point>> getValidMoves() { return this.validMoves; }
+    public Map<Point, List<Point>> getValidMoves() {
+        return uiState.getValidMoves();
+    }
 }

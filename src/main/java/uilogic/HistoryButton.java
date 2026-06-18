@@ -1,6 +1,11 @@
 package uilogic;
 
-public class HistoryButton extends Button {
+/**
+ * Compatibility wrapper: HistoryButton now redirects to RewindButton.
+ * Prefer using RewindButton directly. This class kept for backward compatibility.
+ */
+@Deprecated
+public class HistoryButton extends RewindButton {
     public HistoryButton(int x, int y, int width, int height, String text, Runnable action) {
         super(x, y, width, height, text, action);
     }

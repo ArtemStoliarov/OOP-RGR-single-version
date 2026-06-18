@@ -28,8 +28,8 @@ public class Board {
             for (int c = 0; c < Config.COLS; c++) {
                 Piece p = this.grid[r][c];
                 if (p != null) {
-                    // Фігури більше не приймають координати в конструктор!
-                    Piece clonePiece = p.isKing() ? new King(p.color) : new Man(p.color);
+                    // Using PieceFactory respects Open/Closed Principle
+                    Piece clonePiece = PieceFactory.createPiece(p);
                     copy.setPiece(r, c, clonePiece);
                 }
             }
@@ -61,10 +61,15 @@ public class Board {
     }
 
     // Видалення серії шашок після ланцюгового биття
-    public void remove(List<Point> positions) {
+    public void removeCapturedPieces(List<Point> positions) {
         for (Point pos : positions) {
             removePiece(pos.x, pos.y);
         }
+    }
+
+    // Keep for backward compatibility
+    public void remove(List<Point> positions) {
+        removeCapturedPieces(positions);
     }
 
     // Рух тепер виконується суто з точки А в точку Б
@@ -86,7 +91,8 @@ public class Board {
 
         if (whitePromotes || redPromotes) {
             removePiece(row, col);
-            setPiece(row, col, new King(piece.color)); // Створюємо дамку без координат
+            // Using PieceFactory respects Open/Closed Principle
+            setPiece(row, col, PieceFactory.createKing(piece.color));
         }
     }
 
