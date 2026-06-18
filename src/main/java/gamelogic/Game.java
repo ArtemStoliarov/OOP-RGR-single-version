@@ -178,6 +178,9 @@ public class Game implements GameInterface, Controller {
     public void resign() {
         if (uiState.isGameOver()) return;
 
+        // Close info overlay when resigning
+        uiState.setShowInfo(false);
+
         Color loser = rulesEngine.getCurrentTurn();
         String loserName = loser.equals(Config.RED) ? "ЧЕРВОНІ" : "БІЛІ";
         String winnerName = loser.equals(Config.RED) ? "БІЛІ" : "ЧЕРВОНІ";
