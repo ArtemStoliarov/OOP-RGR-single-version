@@ -1,0 +1,162 @@
+classDiagram
+    %% gamelogic package
+    class Game {
+        -Board board
+        -GameRulesEngine rules
+        -GameUIState uiState
+        -History history
+        -PieceFactory pieceFactory
+        +start()
+        +tryMovePiece(from,to)
+        +rewindTo(index)
+    }
+
+    class Board {
+        -Piece[] squares
+        +getPieceAt(idx)
+        +setPieceAt(idx,p)
+    }
+
+    class GameRulesEngine {
+        +calculateValidMoves(board,piece)
+        +isCaptureMandatory(board,color)
+    }
+
+    class GameUIState {
+        -Piece selectedPiece
+        -Map validMoves
+        +select(piece)
+        +deselect()
+        +setValidMoves(moves)
+    }
+
+    class History {
+        -List moves
+        -int viewIndex
+        +addMove(m)
+        +viewPrevious()
+        +viewNext()
+        +viewCurrent()
+    }
+
+    class Piece {
+        -Color color
+        -int index
+        +isKing()
+        +getColor()
+    }
+
+    class Man
+    class King
+    Piece <|-- Man
+    Piece <|-- King
+
+    %% lib package
+    class Config {
+        +get(key)
+    }
+
+    %% playerinput package
+    class Controller {
+        -Game game
+        -GameInterface ui
+        +onClick(idx)
+    }
+    
+    class MouseTracker {
+        +getMousePos()
+    }
+    
+    class ClickHandler {
+        -Controller controller
+        +handleClick(x,y)
+    }
+
+    %% uilogic package
+    class GameInterface {
+        -Artist artist
+        -SideBar sideBar
+        +refresh()
+    }
+
+    class SideBar {
+        -HistoryConsole historyConsole
+        -InfoButton infoButton
+        -RewindButton rewindPrev
+        -RewindButton rewindNext
+        -RewindButton rewindClose
+        +updateButtonStates()
+    }
+
+    class HistoryConsole {
+        -History history
+        +setPage(i)
+        +nextPage()
+        +prevPage()
+    }
+
+    class Button {
+        +render()
+        +onClick()
+    }
+    class ControlButton
+    class InfoButton
+    class RewindButton {
+        +onClick()
+    }
+
+    %% draw package
+    class Artist {
+        +drawBoard(board)
+        +drawPiece(piece)
+    }
+
+    %% factories
+    class PieceFactory {
+        +create(color,isKing)
+    }
+
+    %% tests / startup
+    class Main
+    class StartupTest
+
+    %% associations with descriptive labels and multiplicities
+    Game --> Board : has a
+    Game --> GameRulesEngine : uses rules
+    Game --> GameUIState : tracks UI state
+    Game --> History : keeps
+    Game --> PieceFactory : creates pieces via
+
+    Board "1" --> "*" Piece : contains
+
+    GameUIState --> Piece : selects/deselects
+    GameUIState "1" --> "*" Map : stores validMoves
+
+    HistoryConsole --> History : reads/writes
+    SideBar --> HistoryConsole : controls
+
+    RewindButton --> HistoryConsole : navigate
+    RewindButton --> SideBar : update
+
+    InfoButton --> HistoryConsole : toggles show/hide
+    InfoButton --> SideBar : update
+
+    GameInterface --> Artist : renders via
+    GameInterface --> SideBar : contains
+
+    Controller --> Game : drives
+    Controller --> GameInterface : updates
+    MouseTracker --> ClickHandler : feeds
+    ClickHandler --> Controller : routes clicks to
+
+    Button <|-- ControlButton
+    Button <|-- InfoButton
+    Button <|-- RewindButton
+
+    PieceFactory --> Piece : returns
+
+    Config --> GameInterface : provides settings to
+    Config --> SideBar : provides settings to
+
+    Main --> Game : starts
+    StartupTest --> Main : verifies
